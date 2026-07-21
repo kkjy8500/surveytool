@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 
 import pandas as pd
 import plotly.express as px
@@ -10,6 +11,7 @@ from metadata import get_var_label, get_value_label
 from charts import compute_single_rows, compute_multiresponse_rows, render_radar_chart
 from tabulation import compute_single_distribution, get_categories
 from display_format import format_pct, format_stat
+from font_utils import browser_font_face_css, browser_primary_font_name, local_font_assets
 from utils import (
     build_zip_bytes_from_mapping,
     dict_to_json_bytes,
@@ -147,7 +149,7 @@ def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata
     for idx, qid in enumerate(ordered_ids, start=1):
         if qid in (selected_mr_groups or []):
             rows.append({
-                "include": False,
+                "include": True,
                 "order": idx,
                 "section": "추천 문항",
                 "question_id": qid,
@@ -155,14 +157,14 @@ def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata
                 "description": "",
                 "question_type": "multi",
                 "default_banner": "전체",
-                "default_chart": "가로 막대",
+                "default_chart": "세로 막대",
             })
             continue
 
         qtype = {"척도형": "scale", "순위형": "rank"}.get(question_type_map.get(qid, "범주형"), "single")
-        default_chart = "레이더" if qtype == "scale" else "가로 막대"
+        default_chart = "세로 막대"
         rows.append({
-            "include": idx <= min(6, len(dep_vars)),
+            "include": True,
             "order": idx,
             "section": "추천 문항",
             "question_id": qid,
@@ -1082,54 +1084,113 @@ def _build_dashboard_deploy_readme(bundle: dict) -> str:
 
 def _build_static_dashboard_html(bundle: dict) -> str:
     meta = bundle.get("app_meta", {})
-    title = meta.get("title", "조사 결과 대시보드")
-    
-    html_parts = [
-        "<!DOCTYPE html>",
-        "<html><head><meta charset='utf-8'>",
-        f"<title>{title}</title>",
-        "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>",
-        "<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif; max-width:1000px; margin:0 auto; padding:30px; background:#f4f7fb;} .card{background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:24px; margin-bottom:30px; box-shadow:0 4px 6px rgba(0,0,0,0.05);} h1{color:#1e293b; margin-bottom:30px;} h3{color:#334155; margin-top:0; border-bottom:1px solid #f1f5f9; padding-bottom:12px;}</style>",
-        "</head><body>",
-        f"<h1>{title}</h1>",
-    ]
-    
-    for item in bundle.get("items", []):
-        q_label = item.get("display_label", "")
-        def_banner = item.get("default_banner", "전체")
-        def_chart = item.get("default_chart", "가로 막대")
-        
-        banner_opts = item.get("available_banners", [])
-        banner_key = next((b["key"] for b in banner_opts if b["label"] == def_banner), None)
-        if banner_key is None and banner_opts:
-             banner_key = banner_opts[0]["key"]
-             
-        if banner_key and banner_key in item.get("results", {}):
-            result = item["results"][banner_key]
-            chart_type = DASHBOARD_CHART_OPTIONS.get(def_chart, "barh")
-            
-            try:
-                fig = render_dashboard_chart(result, chart_type)
-                if fig:
-                    chart_html = fig.to_html(full_html=False, include_plotlyjs=False)
-                    html_parts.append(f"<div class='card'><h3>{q_label}</h3>")
-                    html_parts.append(chart_html)
-                    html_parts.append("</div>")
-            except Exception:
-                pass
+    title = str(meta.get("title", "조사 결과 대시보드"))
+    subtitle = str(meta.get("subtitle", ""))
+    bundle_json = json.dumps(bundle, ensure_ascii=False).replace("</", "<\\/")
+    font_css = browser_font_face_css()
+    available_fonts = list(local_font_assets().keys())
+    primary_font = browser_primary_font_name()
+    browser_family = f"'{primary_font}', 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif" if primary_font else "'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif"
 
-    html_parts.append("</body></html>")
-    return "\n".join(html_parts)
+    return f'''<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    {font_css}
+    :root{{--bg:#f6f8fb;--panel:#fff;--line:#dfe5ee;--text:#172033;--muted:#667085;--accent:#2457d6;--accent-soft:#eaf0ff;--shadow:0 8px 28px rgba(20,34,66,.08)}}
+    *{{box-sizing:border-box}} html,body{{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:{browser_family}}}
+    button,input,select{{font:inherit}} button{{cursor:pointer}}
+    .shell{{display:grid;grid-template-columns:310px minmax(0,1fr);min-height:100vh}}
+    .sidebar{{position:sticky;top:0;height:100vh;background:var(--panel);border-right:1px solid var(--line);padding:22px 18px;overflow:auto}}
+    .brand h1{{font-size:21px;margin:0 0 6px}} .brand p{{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.5}}
+    .label{{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:15px 0 6px}}
+    .control{{width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 11px;color:var(--text)}}
+    .navrow{{display:grid;grid-template-columns:42px 1fr 42px;gap:7px;margin-top:12px}} .navbtn{{border:1px solid var(--line);border-radius:10px;background:#fff;padding:9px}}
+    .question-list{{margin-top:12px;display:grid;gap:5px}} .qitem{{width:100%;text-align:left;border:0;border-radius:9px;background:transparent;padding:9px 10px;color:var(--text);line-height:1.35}}
+    .qitem:hover,.qitem.active{{background:var(--accent-soft);color:var(--accent)}} .qitem small{{display:block;color:var(--muted);margin-bottom:2px}}
+    .main{{padding:28px;min-width:0}} .topbar{{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:18px}}
+    .eyebrow{{font-size:13px;color:var(--accent);font-weight:700;margin-bottom:5px}} .title{{font-size:25px;margin:0;line-height:1.35}} .desc{{color:var(--muted);margin:7px 0 0;line-height:1.6}}
+    .favorite{{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 13px;white-space:nowrap}} .favorite.on{{background:#fff6d8;border-color:#ead48a}}
+    .metrics{{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}} .metric{{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;min-width:130px}}
+    .metric span{{display:block;color:var(--muted);font-size:12px}} .metric strong{{display:block;font-size:20px;margin-top:3px}}
+    .panel{{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:18px}}
+    .toolbar{{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:8px}} .toolbar>label{{min-width:170px;flex:0 1 230px}}
+    #chart{{width:100%;min-height:500px}} .note{{font-size:13px;color:var(--muted);line-height:1.6;margin-top:8px}}
+    .empty{{padding:80px 20px;text-align:center;color:var(--muted)}}
+    .fav-only{{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:13px;color:var(--muted)}}
+    @media(max-width:850px){{.shell{{display:block}}.sidebar{{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}}.main{{padding:18px}}.question-list{{max-height:260px;overflow:auto}}#chart{{min-height:430px}}}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><h1>{title}</h1><p>{subtitle}</p></div>
+    <label class="label" for="search">문항 검색</label><input id="search" class="control" placeholder="문항번호 또는 문항 내용">
+    <label class="label" for="section">파트·문항영역</label><select id="section" class="control"></select>
+    <label class="label" for="question">문항 선택</label><select id="question" class="control"></select>
+    <div class="navrow"><button id="prev" class="navbtn" type="button">◀</button><button id="random" class="navbtn" type="button">선택 문항 보기</button><button id="next" class="navbtn" type="button">▶</button></div>
+    <label class="fav-only"><input id="favOnly" type="checkbox"> 즐겨찾기만 보기</label>
+    <div id="questionList" class="question-list"></div>
+  </aside>
+  <main class="main">
+    <div id="content"></div>
+  </main>
+</div>
+<script id="dashboard-data" type="application/json">{bundle_json}</script>
+<script>
+const bundle=JSON.parse(document.getElementById('dashboard-data').textContent);
+const items=bundle.items||[];
+const state={{index:0,search:'',section:'전체',favOnly:false,favorites:new Set(),banner:null,chart:null}};
+const el=id=>document.getElementById(id);
+const escapeHtml=s=>String(s??'').replace(/[&<>"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));
+function sections(){{return ['전체',...new Set(items.map(x=>x.section||'미분류'))]}}
+function filtered(){{return items.filter(x=>{{const text=`${{x.question_id}} ${{x.display_label}} ${{x.description||''}}`.toLowerCase();return (!state.search||text.includes(state.search.toLowerCase()))&&(state.section==='전체'||(x.section||'미분류')===state.section)&&(!state.favOnly||state.favorites.has(x.question_id));}})}}
+function currentList(){{const list=filtered();if(state.index>=list.length)state.index=Math.max(0,list.length-1);return list}}
+function syncControls(){{
+ const secs=sections(); el('section').innerHTML=secs.map(x=>`<option>${{escapeHtml(x)}}</option>`).join('');el('section').value=state.section;
+ const list=currentList();el('question').innerHTML=list.map((x,i)=>`<option value="${{i}}">${{escapeHtml(x.question_id)}}. ${{escapeHtml(x.display_label)}}</option>`).join('');el('question').value=String(state.index);
+ el('questionList').innerHTML=list.map((x,i)=>`<button type="button" class="qitem ${{i===state.index?'active':''}}" data-i="${{i}}"><small>${{escapeHtml(x.section||'미분류')}} · ${{escapeHtml(x.question_id)}}</small>${{escapeHtml(x.display_label)}}</button>`).join('');
+ document.querySelectorAll('.qitem').forEach(b=>b.addEventListener('click',()=>{{state.index=Number(b.dataset.i);state.banner=null;state.chart=null;render();}}));
+}}
+function prepare(result){{
+ if(result.banner_var){{const rows=[];(result.banner_rows||[]).forEach(g=>(g.rows||[]).forEach(r=>{{if(r.pct!=null)rows.push({{group:String(g.banner_label||''),label:String(r.label||''),n:r.n??0,pct:Number(r.pct)}})}}));return rows;}}
+ return (result.rows||[]).filter(r=>r.pct!=null).map(r=>({{label:String(r.label||''),n:r.n??0,pct:Number(r.pct)}}));
+}}
+function plot(item,result,chartType){{
+ const rows=prepare(result);if(!rows.length){{el('chart').innerHTML='<div class="empty">표시할 결과가 없습니다.</div>';return;}}
+ const grouped=rows.some(r=>r.group!==undefined);let traces=[];let layout={{margin:{{t:35,r:25,b:95,l:65}},paper_bgcolor:'#fff',plot_bgcolor:'#fff',font:{{family:{json.dumps(browser_family, ensure_ascii=False)}}},yaxis:{{title:'%',rangemode:'tozero',gridcolor:'#edf0f5'}},xaxis:{{tickangle:rows.length>6?-25:0}},legend:{{orientation:'h',y:-.25}},hovermode:'closest'}};
+ if(grouped){{const groups=[...new Set(rows.map(r=>r.group))];traces=groups.map(g=>{{const d=rows.filter(r=>r.group===g);return {{type:'bar',name:g,x:d.map(r=>r.label),y:d.map(r=>r.pct),customdata:d.map(r=>r.n),text:d.map(r=>r.pct.toFixed(1)+'%'),textposition:'outside',hovertemplate:'%{{x}}<br>'+g+': %{{y:.1f}}%<br>N=%{{customdata}}<extra></extra>'}}}});layout.barmode='group';}}
+ else if(chartType==='도넛'){{traces=[{{type:'pie',labels:rows.map(r=>r.label),values:rows.map(r=>r.pct),customdata:rows.map(r=>r.n),hole:.48,hovertemplate:'%{{label}}: %{{value:.1f}}%<br>N=%{{customdata}}<extra></extra>'}}];layout.margin={{t:20,r:20,b:20,l:20}};}}
+ else if(chartType==='가로 막대'){{traces=[{{type:'bar',orientation:'h',y:rows.map(r=>r.label),x:rows.map(r=>r.pct),customdata:rows.map(r=>r.n),text:rows.map(r=>r.pct.toFixed(1)+'%'),textposition:'outside',marker:{{color:'#2457d6'}},hovertemplate:'%{{y}}: %{{x:.1f}}%<br>N=%{{customdata}}<extra></extra>'}}];layout.xaxis={{title:'%',rangemode:'tozero',gridcolor:'#edf0f5'}};layout.yaxis={{automargin:true,categoryorder:'array',categoryarray:rows.map(r=>r.label).slice().reverse()}};layout.margin={{t:25,r:45,b:55,l:150}};}}
+ else{{traces=[{{type:'bar',x:rows.map(r=>r.label),y:rows.map(r=>r.pct),customdata:rows.map(r=>r.n),text:rows.map(r=>r.pct.toFixed(1)+'%'),textposition:'outside',marker:{{color:'#2457d6'}},hovertemplate:'%{{x}}: %{{y:.1f}}%<br>N=%{{customdata}}<extra></extra>'}}];}}
+ Plotly.react('chart',traces,layout,{{responsive:true,displaylogo:false,toImageButtonOptions:{{format:'png',filename:item.question_id+'_chart',scale:2}}}});
+}}
+function render(){{
+ syncControls();const list=currentList();if(!list.length){{el('content').innerHTML='<div class="panel empty">조건에 맞는 문항이 없습니다.</div>';return;}}const item=list[state.index];
+ const banners=item.available_banners||[];const bkey=state.banner&&item.results[state.banner]?state.banner:(item.default_banner_key||banners[0]?.key);state.banner=bkey;
+ const chart=state.chart||item.default_chart||'세로 막대';state.chart=chart;const result=item.results[bkey];
+ const fav=state.favorites.has(item.question_id);const bannerLabel=(banners.find(x=>x.key===bkey)||{{label:'전체'}}).label;
+ el('content').innerHTML=`<div class="topbar"><div><div class="eyebrow">${{escapeHtml(item.section||'미분류')}} · ${{escapeHtml(item.question_id)}}</div><h2 class="title">${{escapeHtml(item.display_label)}}</h2><p class="desc">${{escapeHtml(item.description||'')}}</p></div><button id="favorite" class="favorite ${{fav?'on':''}}" type="button">${{fav?'★ 주요 문항':'☆ 주요 문항'}}</button></div><div class="metrics"><div class="metric"><span>유효응답 N</span><strong>${{Number(result?.base||0).toLocaleString()}}</strong></div><div class="metric"><span>비교 기준</span><strong>${{escapeHtml(bannerLabel)}}</strong></div><div class="metric"><span>현재 위치</span><strong>${{state.index+1}} / ${{list.length}}</strong></div></div><section class="panel"><div class="toolbar"><label><span class="label">비교 기준</span><select id="banner" class="control">${{banners.map(x=>`<option value="${{escapeHtml(x.key)}}">${{escapeHtml(x.label)}}</option>`).join('')}}</select></label><label><span class="label">그래프 유형</span><select id="chartType" class="control"><option>세로 막대</option><option>가로 막대</option><option>도넛</option></select></label></div><div id="chart"></div><div class="note">막대 또는 범주에 마우스를 올리면 비율과 응답 수를 확인할 수 있습니다. 차트 우측 상단 카메라 버튼으로 PNG 저장이 가능합니다.</div></section>`;
+ el('banner').value=bkey;el('chartType').value=chart;el('favorite').addEventListener('click',()=>{{fav?state.favorites.delete(item.question_id):state.favorites.add(item.question_id);render();}});el('banner').addEventListener('change',e=>{{state.banner=e.target.value;render();}});el('chartType').addEventListener('change',e=>{{state.chart=e.target.value;render();}});plot(item,result,chart);
+}}
+el('search').addEventListener('input',e=>{{state.search=e.target.value;state.index=0;render();}});el('section').addEventListener('change',e=>{{state.section=e.target.value;state.index=0;render();}});el('question').addEventListener('change',e=>{{state.index=Number(e.target.value);state.banner=null;state.chart=null;render();}});el('favOnly').addEventListener('change',e=>{{state.favOnly=e.target.checked;state.index=0;render();}});el('prev').addEventListener('click',()=>{{const n=currentList().length;if(n)state.index=(state.index-1+n)%n;state.banner=null;state.chart=null;render();}});el('next').addEventListener('click',()=>{{const n=currentList().length;if(n)state.index=(state.index+1)%n;state.banner=null;state.chart=null;render();}});el('random').addEventListener('click',render);render();
+</script>
+</body>
+</html>'''
 
 def build_dashboard_deploy_zip(bundle: dict, package_name: str = "survey_dashboard_package") -> bytes:
     package_dir = safe_filename(package_name or "survey_dashboard_package")
     file_mapping = {
+        f"{package_dir}/index.html": _build_static_dashboard_html(bundle).encode("utf-8"),
         f"{package_dir}/dashboard_bundle.json": build_dashboard_bundle_json_bytes(bundle),
-        f"{package_dir}/streamlit_app.py": _build_streamlit_bundle_app_py().encode("utf-8"),
-        f"{package_dir}/requirements.txt": b"streamlit\npandas\nplotly\n",
         f"{package_dir}/README.md": _build_dashboard_deploy_readme(bundle).encode("utf-8"),
-        f"{package_dir}/dashboard.html": _build_static_dashboard_html(bundle).encode("utf-8"),
     }
+    for filename, content in local_font_assets().items():
+        file_mapping[f"{package_dir}/assets/fonts/{filename}"] = content
     return build_zip_bytes_from_mapping(file_mapping)
 
 

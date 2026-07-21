@@ -249,7 +249,7 @@ def page_tables():
 
 def page_visualization():
     st.header("3. 저장 / 시각화")
-    st.caption("기존 그래프와 대시보드 기능은 유지하고, 조사설정 파일에서 읽은 문항·배너 구조를 사용합니다.")
+    st.caption("전체값 기준 PNG 그래프와 고객용 정적 HTML 대시보드를 같은 분석 결과로 생성합니다.")
     try:
         ctx = _load_context()
     except Exception as exc:
@@ -286,7 +286,7 @@ def page_visualization():
     tab1, tab2 = st.tabs(["그래프", "대시보드"])
     with tab1:
         presets = get_chart_preset_names()
-        fonts = get_available_korean_fonts() or ["NanumGothic"]
+        fonts = get_available_korean_fonts() or ["자동 선택"]
         c1, c2, c3 = st.columns(3)
         preset = c1.selectbox("그래프 프리셋", presets)
         default_type = c2.selectbox("기본 그래프 유형", list(CHART_TYPE_OPTIONS.keys()))
@@ -364,7 +364,7 @@ def page_visualization():
             missing_rules_by_var={},
         )
         st.download_button(
-            "대시보드 배포 패키지 다운로드",
+            "고객용 HTML 대시보드 ZIP 다운로드",
             build_dashboard_deploy_zip(bundle, package_name=package_name),
             file_name=f"{safe_filename(package_name)}.zip",
             mime="application/zip",

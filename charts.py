@@ -30,6 +30,7 @@ from display_format import format_chart_count_text, format_pct, format_stat
 from metadata import get_var_label
 from tabulation import compute_multiresponse_distribution, compute_single_distribution
 from utils import safe_filename
+from font_utils import get_available_font_names, register_local_fonts, set_matplotlib_korean_font
 
 
 SCALE_COLOR_PALETTES = {
@@ -72,44 +73,18 @@ def render_radar_chart(labels, values, title):
 
 
 def register_local_korean_fonts():
-    search_dirs = [Path(__file__).resolve().parent / "fonts", Path.cwd() / "fonts", Path("/mnt/data/fonts")]
-    for font_dir in search_dirs:
-        if not font_dir.exists():
-            continue
-        for pattern in ("*.ttf", "*.otf"):
-            for path in font_dir.glob(pattern):
-                try:
-                    font_manager.fontManager.addfont(str(path))
-                except Exception:
-                    continue
+    return register_local_fonts()
 
 
 def try_set_korean_font(font_name=None):
-    register_local_korean_fonts()
-    candidates = ["KoPubDotum", "KoPub돋움체 Medium", "Pretendard", "NanumGothic", "Malgun Gothic", "AppleGothic", "Noto Sans KR", "Noto Sans CJK KR"]
-    available = {f.name for f in font_manager.fontManager.ttflist}
-    if font_name and font_name in available:
-        rcParams["font.family"] = font_name
-        rcParams["axes.unicode_minus"] = False
-        return font_name
-    for name in candidates:
-        if name in available:
-            rcParams["font.family"] = name
-            rcParams["axes.unicode_minus"] = False
-            return name
-    rcParams["axes.unicode_minus"] = False
-    return None
+    return set_matplotlib_korean_font(font_name)
 
 
 FONT_SET = try_set_korean_font()
 
 
 def get_available_korean_fonts():
-    register_local_korean_fonts()
-    candidates = ["KoPubDotum", "KoPub돋움체 Medium", "Pretendard", "NanumGothic", "Malgun Gothic", "AppleGothic", "Noto Sans KR", "Noto Sans CJK KR"]
-    available = {f.name for f in font_manager.fontManager.ttflist}
-    return [f for f in candidates if f in available]
-
+    return get_available_font_names()
 
 
 
