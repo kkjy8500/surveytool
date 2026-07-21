@@ -1511,3 +1511,5 @@ def render_dashboard_preview(
         _render_analysis_tab(bundle, extra_params=extra_params)
     with tab_rel:
         _render_relation_tab(bundle)
+
+SURVEY_TOOL_VERSION = "5.1"

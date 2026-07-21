@@ -406,3 +406,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+SURVEY_TOOL_VERSION = "5.1"
