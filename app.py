@@ -161,9 +161,9 @@ def page_files():
 
     if TEMPLATE_PATH.exists():
         st.download_button(
-            "표준 조사설정 템플릿 다운로드",
+            "조사설정 템플릿 다운로드",
             TEMPLATE_PATH.read_bytes(),
-            file_name="범용_표준_조사설정_템플릿.xlsx",
+            file_name="survey_settings.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
