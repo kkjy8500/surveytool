@@ -216,7 +216,7 @@ def normalize_dashboard_config_df(
 
     out = merged.reset_index()
     out = out[DEFAULT_DASHBOARD_CONFIG_COLUMNS]
-    out["include"] = out["include"].fillna(False).astype(bool)
+    out["include"] = out["include"].fillna(True).astype(bool)
     out["order"] = pd.to_numeric(out["order"], errors="coerce").fillna(999).astype(int)
     out["section"] = out["section"].fillna("미분류")
     out["display_label"] = out["display_label"].fillna(out["question_id"])
