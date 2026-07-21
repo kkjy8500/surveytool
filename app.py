@@ -37,7 +37,7 @@ from tabulation import build_multiresponse_table, build_profile_table, build_que
 from utils import build_zip_bytes_from_mapping, safe_filename
 
 ROOT = Path(__file__).resolve().parent
-TEMPLATE_PATH = ROOT / "templates" / "standard_survey_settings.xlsx"
+TEMPLATE_PATH = ROOT / "templates" / "survey_settings.xlsx"
 
 st.set_page_config(page_title="Survey Tool", page_icon="📊", layout="wide")
 
