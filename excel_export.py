@@ -382,6 +382,7 @@ def export_to_excel(
     add_excel_chart: bool = False,
     n_in_parentheses: bool = False,
     audit_trail: dict | None = None,
+    section_map: dict | None = None,
 ):
     """
     Main export engine with Index and Audit Trail support (Point 11, 12).
@@ -397,11 +398,10 @@ def export_to_excel(
     index_ws.cell(row=3, column=2, value="문항ID").font = Font(bold=True)
     index_ws.cell(row=3, column=3, value="문항명").font = Font(bold=True)
     
-    # --- 2. Main Stats Sheet ---
-    ws = workbook.create_sheet(clean_sheet_name(OUTPUT_SHEET_NAME))
     ordered_items = _ordered_table_items(table_dict or {})
-    
-    current_row = 2 # Start from row 2 for better spacing
+    section_map = section_map or {}
+    sheets = {}
+    current_rows = {}
     
     style_kwargs = {
         "title_bold": title_bold,
@@ -415,7 +415,13 @@ def export_to_excel(
 
     for idx, (table_name, table_df) in enumerate(ordered_items, start=1):
         table_df = table_df.copy() if table_df is not None else pd.DataFrame()
-        
+        section = section_map.get(table_name, "응답자특성" if is_profile_sheet_name(table_name) else "미분류")
+        sheet_name = clean_sheet_name(section)
+        if sheet_name not in sheets:
+            sheets[sheet_name] = workbook.create_sheet(sheet_name)
+            current_rows[sheet_name] = 2
+        ws = sheets[sheet_name]
+        current_row = current_rows[sheet_name]
         title_row = current_row
         
         # Add entry to Index sheet
@@ -451,9 +457,10 @@ def export_to_excel(
                 title_row=title_row,
             )
 
-        current_row = data_end_row + TABLE_GAP_ROWS + 1
+        current_rows[sheet_name] = data_end_row + TABLE_GAP_ROWS + 1
 
-    _apply_column_widths(ws)
+    for ws in sheets.values():
+        _apply_column_widths(ws)
     workbook.save(output)
     output.seek(0)
     return output

@@ -141,9 +141,10 @@ def get_dashboard_banner_options(profile_vars: list, metadata: dict) -> dict:
     return options
 
 
-def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata: dict, question_type_map: dict | None = None) -> pd.DataFrame:
+def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata: dict, question_type_map: dict | None = None, section_map: dict | None = None) -> pd.DataFrame:
     rows = []
     question_type_map = question_type_map or {}
+    section_map = section_map or {}
     ordered_ids = sort_var_names(list(dict.fromkeys(list(dep_vars or []) + list(selected_mr_groups or []))))
 
     for idx, qid in enumerate(ordered_ids, start=1):
@@ -151,7 +152,7 @@ def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata
             rows.append({
                 "include": True,
                 "order": idx,
-                "section": "추천 문항",
+                "section": section_map.get(qid, "미분류"),
                 "question_id": qid,
                 "display_label": qid,
                 "description": "",
@@ -166,7 +167,7 @@ def build_dashboard_config_df(dep_vars: list, selected_mr_groups: list, metadata
         rows.append({
             "include": True,
             "order": idx,
-            "section": "추천 문항",
+            "section": section_map.get(qid, "미분류"),
             "question_id": qid,
             "display_label": get_var_label(qid, metadata),
             "description": "",
@@ -187,8 +188,9 @@ def normalize_dashboard_config_df(
     selected_mr_groups: list,
     metadata: dict,
     question_type_map: dict | None = None,
+    section_map: dict | None = None,
 ) -> pd.DataFrame:
-    fresh = build_dashboard_config_df(dep_vars, selected_mr_groups, metadata, question_type_map=question_type_map)
+    fresh = build_dashboard_config_df(dep_vars, selected_mr_groups, metadata, question_type_map=question_type_map, section_map=section_map)
     if df is None or df.empty:
         return fresh
 
@@ -216,7 +218,7 @@ def normalize_dashboard_config_df(
     out = out[DEFAULT_DASHBOARD_CONFIG_COLUMNS]
     out["include"] = out["include"].fillna(False).astype(bool)
     out["order"] = pd.to_numeric(out["order"], errors="coerce").fillna(999).astype(int)
-    out["section"] = out["section"].fillna("추천 문항")
+    out["section"] = out["section"].fillna("미분류")
     out["display_label"] = out["display_label"].fillna(out["question_id"])
     out["description"] = out["description"].fillna("")
     out["question_type"] = out["question_type"].fillna("single")
@@ -1182,15 +1184,20 @@ el('search').addEventListener('input',e=>{{state.search=e.target.value;state.ind
 </body>
 </html>'''
 
-def build_dashboard_deploy_zip(bundle: dict, package_name: str = "survey_dashboard_package") -> bytes:
-    package_dir = safe_filename(package_name or "survey_dashboard_package")
+def build_dashboard_deploy_files(bundle: dict) -> dict[str, bytes]:
     file_mapping = {
-        f"{package_dir}/index.html": _build_static_dashboard_html(bundle).encode("utf-8"),
-        f"{package_dir}/dashboard_bundle.json": build_dashboard_bundle_json_bytes(bundle),
-        f"{package_dir}/README.md": _build_dashboard_deploy_readme(bundle).encode("utf-8"),
+        "index.html": _build_static_dashboard_html(bundle).encode("utf-8"),
+        "data.json": build_dashboard_bundle_json_bytes(bundle),
+        "README.md": _build_dashboard_deploy_readme(bundle).encode("utf-8"),
     }
     for filename, content in local_font_assets().items():
-        file_mapping[f"{package_dir}/assets/fonts/{filename}"] = content
+        file_mapping[f"assets/fonts/{filename}"] = content
+    return file_mapping
+
+
+def build_dashboard_deploy_zip(bundle: dict, package_name: str = "survey_dashboard_package") -> bytes:
+    package_dir = safe_filename(package_name or "survey_dashboard_package")
+    file_mapping = {f"{package_dir}/{name}": content for name, content in build_dashboard_deploy_files(bundle).items()}
     return build_zip_bytes_from_mapping(file_mapping)
 
 

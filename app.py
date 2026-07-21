@@ -25,6 +25,7 @@ from dashboard import (
     build_dashboard_bundle,
     build_dashboard_config_df,
     build_dashboard_deploy_zip,
+    build_dashboard_deploy_files,
     normalize_dashboard_config_df,
     render_dashboard_preview,
 )
@@ -147,7 +148,6 @@ def _build_tables(ctx: dict) -> tuple[dict, dict]:
 
 def page_files():
     st.header("1. 파일 준비")
-    st.caption("데이터 파일과 조사설정 엑셀파일만 업로드하면 분석 준비가 끝납니다.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -218,11 +218,6 @@ def page_tables():
 
     tables, info = _build_tables(ctx)
     st.metric("생성 대상 통계표", f"{len(tables):,}개")
-    if info["weight_col"]:
-        st.caption(f"가중치 변수 자동 적용: {info['weight_col']}")
-    else:
-        st.caption("가중치 변수 없음: 원자료 기준으로 산출")
-
     preview_name = st.selectbox("미리보기", list(tables.keys()))
     st.dataframe(tables[preview_name], use_container_width=True, hide_index=True)
 
@@ -237,6 +232,7 @@ def page_tables():
         add_excel_chart=False,
         n_in_parentheses=False,
         audit_trail=None,
+        section_map=cfg.get("section_by_question", {}),
     )
     st.download_button(
         "통계표 엑셀 다운로드",
@@ -249,7 +245,6 @@ def page_tables():
 
 def page_visualization():
     st.header("3. 저장 / 시각화")
-    st.caption("전체값 기준 PNG 그래프와 고객용 정적 HTML 대시보드를 같은 분석 결과로 생성합니다.")
     try:
         ctx = _load_context()
     except Exception as exc:
@@ -304,17 +299,22 @@ def page_visualization():
             current,
             use_container_width=True,
             hide_index=True,
+            height=520,
             disabled=["question_id", "question_text", "recommended_chart"],
             column_config={
-                "chart_type": st.column_config.SelectboxColumn(options=list(CHART_TYPE_OPTIONS.keys())),
-                "font": st.column_config.SelectboxColumn(options=fonts),
+                "include": st.column_config.CheckboxColumn("포함"),
+                "question_id": st.column_config.TextColumn("문항번호"),
+                "question_text": st.column_config.TextColumn("문항명"),
+                "chart_type": st.column_config.SelectboxColumn("그래프 유형", options=list(CHART_TYPE_OPTIONS.keys())),
+                "font": st.column_config.SelectboxColumn("폰트", options=fonts),
             },
+            column_order=["include", "question_id", "question_text", "chart_type"],
         )
         st.session_state["chart_settings_df"] = edited
 
         if st.button("그래프 생성", type="primary"):
             settings_dict = chart_settings_df_to_dict(edited)
-            st.session_state["chart_files"] = build_all_charts(chart_results, settings_dict, show_n_label=False, max_categories=int(max_categories))
+            st.session_state["chart_files"] = build_all_charts(chart_results, settings_dict, show_n_label=False, max_categories=int(max_categories), section_map=cfg.get("section_by_question", {}), graph_settings=cfg.get("graph_settings", {}))
 
         chart_files = st.session_state.get("chart_files", {})
         if chart_files:
@@ -322,15 +322,27 @@ def page_visualization():
             st.image(chart_files[first_name], caption=first_name)
             st.download_button(
                 "그래프 PNG 일괄 다운로드",
-                build_zip_bytes_from_mapping({f"charts/{k}": v for k, v in chart_files.items()}),
+                build_zip_bytes_from_mapping({f"graphs/{k}": v for k, v in chart_files.items()}),
                 file_name="survey_charts.zip",
                 mime="application/zip",
             )
 
     with tab2:
-        fresh_config = build_dashboard_config_df(cfg["dep_vars"], cfg["selected_mr_groups"], cfg["metadata"], question_type_map=cfg["type_map"])
-        dashboard_df = normalize_dashboard_config_df(st.session_state.get("dashboard_config_df"), cfg["dep_vars"], cfg["selected_mr_groups"], cfg["metadata"], question_type_map=cfg["type_map"])
-        st.session_state["dashboard_config_df"] = st.data_editor(dashboard_df, use_container_width=True, hide_index=True)
+        fresh_config = build_dashboard_config_df(cfg["dep_vars"], cfg["selected_mr_groups"], cfg["metadata"], question_type_map=cfg["type_map"], section_map=cfg.get("section_by_question", {}))
+        dashboard_df = normalize_dashboard_config_df(st.session_state.get("dashboard_config_df"), cfg["dep_vars"], cfg["selected_mr_groups"], cfg["metadata"], question_type_map=cfg["type_map"], section_map=cfg.get("section_by_question", {}))
+        st.session_state["dashboard_config_df"] = st.data_editor(
+            dashboard_df, use_container_width=True, hide_index=True, height=520,
+            disabled=["question_id", "question_type"],
+            column_config={
+                "include": st.column_config.CheckboxColumn("포함"),
+                "order": st.column_config.NumberColumn("순서", min_value=1, step=1),
+                "section": st.column_config.TextColumn("문항영역"),
+                "question_id": st.column_config.TextColumn("문항번호"),
+                "display_label": st.column_config.TextColumn("표시 문항명"),
+                "default_chart": st.column_config.SelectboxColumn("기본 그래프", options=["가로 막대", "세로 막대", "도넛", "레이더"]),
+            },
+            column_order=["include", "order", "section", "question_id", "display_label", "default_chart"],
+        )
 
         render_dashboard_preview(
             config_df=st.session_state["dashboard_config_df"],
@@ -363,8 +375,17 @@ def page_visualization():
             preferred_subdomain=package_name,
             missing_rules_by_var={},
         )
+        if st.button("고객용 Dashboard 폴더 생성", type="primary"):
+            output_dir = ROOT / "output" / safe_filename(package_name)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for relative_path, content in build_dashboard_deploy_files(bundle).items():
+                target = output_dir / relative_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+            st.success(f"생성 완료: {output_dir}")
+
         st.download_button(
-            "고객용 HTML 대시보드 ZIP 다운로드",
+            "Dashboard 폴더 ZIP 다운로드",
             build_dashboard_deploy_zip(bundle, package_name=package_name),
             file_name=f"{safe_filename(package_name)}.zip",
             mime="application/zip",
@@ -374,7 +395,6 @@ def page_visualization():
 def main():
     _init_state()
     st.title("Survey Tool")
-    st.caption("조사설정 엑셀 기반 통계표·시각화 자동화")
     page = st.sidebar.radio("작업 단계", ["1. 파일 준비", "2. 통계표 추출", "3. 저장 / 시각화"])
     if page.startswith("1"):
         page_files()

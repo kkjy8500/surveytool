@@ -501,14 +501,36 @@ def chart_settings_df_to_dict(df_settings):
     return settings
 
 
-def build_all_charts(chart_results: list, chart_settings: dict, show_n_label: bool = False, max_categories: int = 10):
+def build_all_charts(chart_results: list, chart_settings: dict, show_n_label: bool = False, max_categories: int = 10, section_map: dict | None = None, graph_settings: dict | None = None):
     chart_files = {}
+    section_map = section_map or {}
+    graph_settings = graph_settings or {}
     for result in chart_results:
         validation = validate_chart_renderable(result, max_categories=max_categories)
         if not validation["ok"]:
             print(f"[CHART SKIPPED] 문항 {result.get('question_id')} 그래프 생성 건너뜀: {validation['reason']}")
             continue
-        cfg = chart_settings.get(result["question_id"], {})
+        cfg = dict(chart_settings.get(result["question_id"], {}))
+        extra = graph_settings.get(result["question_id"], {})
+        if extra.get("color"):
+            cfg["color"] = extra["color"]
+        render_result = dict(result)
+        if extra.get("linebreak"):
+            rules = [x.strip() for x in str(extra["linebreak"]).split(";") if x.strip()]
+            rows2 = []
+            for row in result.get("rows", []):
+                row2 = dict(row)
+                label = str(row2.get("label", ""))
+                for rule in rules:
+                    if "=>" in rule:
+                        old, new = rule.split("=>", 1)
+                        if label == old.strip():
+                            label = new.strip().replace("|", "\n")
+                    else:
+                        label = label.replace(rule, rule.replace("|", "\n"))
+                row2["label"] = label
+                rows2.append(row2)
+            render_result["rows"] = rows2
         rows = [r for r in result.get("rows", []) if r.get("pct") is not None]
         if not rows:
             continue
@@ -519,15 +541,16 @@ def build_all_charts(chart_results: list, chart_settings: dict, show_n_label: bo
             chart_type = "barh" if longest_label >= 16 or len(rows) >= 6 else "barv"
         
         # 파일명 충돌 방지 로직
-        base_filename = f"{safe_filename(result['question_id'])}.png"
+        section = safe_filename(section_map.get(result["question_id"], "미분류"))
+        base_filename = f"{section}/{safe_filename(result['question_id'])}.png"
         filename = base_filename
         counter = 2
         while filename in chart_files:
-            filename = f"{safe_filename(result['question_id'])}_{counter}.png"
+            filename = f"{section}/{safe_filename(result['question_id'])}_{counter}.png"
             counter += 1
 
         chart_files[filename] = render_chart_png(
-            result=result,
+            result=render_result,
             chart_type=chart_type,
             chart_color=cfg.get("color", "#406A9F"),
             font_name=cfg.get("font", FONT_SET),

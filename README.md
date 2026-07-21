@@ -45,3 +45,36 @@ streamlit run app.py
 - 기본 그래프 생성 대상: 단일응답, 복수응답, 척도형, 순위형
 - 복수응답: 기존 그룹 규칙과 선택코드 1 사용
 - 가중치: `wt`, `weight`, `가중치`, `표본가중치` 자동 감지
+
+## GitHub에 fonts 폴더 올리기
+
+Git은 빈 폴더를 추적하지 않으므로 `fonts/.gitkeep`을 포함했습니다. `.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2` 파일은 `.gitignore`의 예외 규칙으로 추적되도록 설정되어 있습니다.
+
+1. 사용할 폰트 파일을 `fonts/`에 복사합니다.
+2. Windows에서는 `add_fonts_to_git.bat`를 실행합니다.
+3. GitHub Desktop에서 변경 파일을 커밋한 뒤 Push합니다.
+
+직접 명령어를 사용할 경우:
+
+```bash
+git add .gitignore .gitattributes fonts/.gitkeep
+git add -f fonts/*.ttf fonts/*.otf fonts/*.ttc fonts/*.woff fonts/*.woff2
+git commit -m "Add project fonts"
+git push
+```
+
+폰트 파일을 저장소에 포함하기 전에는 해당 폰트의 재배포 및 웹 임베딩 라이선스를 확인해야 합니다.
+
+## v5 추가사항
+
+- `문항설정` 시트에 `문항영역` 열 추가
+- 문항영역을 대시보드 필터, 그래프 폴더, PNG ZIP 경로, 통계표 시트에 자동 연결
+- 분석 가능한 모든 문항을 그래프·대시보드 기본 포함
+- 3단계 설정표는 Streamlit `data_editor`에서 엑셀처럼 직접 수정 가능
+- 그래프 설정표는 자주 수정하는 열만 표시하여 문항이 많아도 빠르게 검토 가능
+- 선택 시트 `그래프설정` 지원
+  - `문항번호`
+  - `막대색상`: 예) `#406A9F`
+  - `줄바꿈`: 예) `매우 만족=>매우|만족;전혀 만족하지 않음=>전혀 만족하지|않음`
+- `고객용 Dashboard 폴더 생성` 버튼으로 `output/<패키지명>/index.html`, `data.json`, `assets/` 생성
+- 각 작업 페이지의 안내 캡션 제거

@@ -11,6 +11,7 @@ from utils import guess_rank_group_name, sort_var_names
 
 QUESTION_SHEET = "문항설정"
 BANNER_SHEET = "배너설정"
+CHART_SHEET = "그래프설정"
 
 TYPE_MAP = {
     "단일응답": "범주형",
@@ -46,6 +47,7 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
 
     question_df = pd.read_excel(xls, sheet_name=QUESTION_SHEET, dtype=object).dropna(how="all")
     banner_df = pd.read_excel(xls, sheet_name=BANNER_SHEET, dtype=object).dropna(how="all")
+    chart_df = pd.read_excel(xls, sheet_name=CHART_SHEET, dtype=object).dropna(how="all") if CHART_SHEET in xls.sheet_names else pd.DataFrame()
 
     required_q = ["QtnType", "문항/보기번호", "내용", "문항유형", "배너설정"]
     required_b = ["배너설정", "배너명", "기준변수", "출력순서"]
@@ -54,11 +56,14 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
     if missing_q or missing_b:
         raise ValueError("필수 열이 없습니다. " + "; ".join(filter(None, [f"문항설정: {missing_q}" if missing_q else "", f"배너설정: {missing_b}" if missing_b else ""])))
 
-    question_df = question_df[required_q].copy()
+    if "문항영역" not in question_df.columns:
+        question_df["문항영역"] = "미분류"
+    question_df = question_df[required_q + ["문항영역"]].copy()
     question_rows = question_df[question_df["문항/보기번호"].map(_is_question_row)].copy()
     question_rows["var"] = question_rows["문항/보기번호"].astype(str).str.strip().str.lstrip("/")
     question_rows["문항유형"] = question_rows["문항유형"].fillna("").astype(str).str.strip()
     question_rows["배너설정"] = question_rows["배너설정"].fillna("전체값만 출력").astype(str).str.strip()
+    question_rows["문항영역"] = question_rows["문항영역"].fillna("미분류").astype(str).str.strip().replace("", "미분류")
 
     invalid_types = sorted(set(question_rows.loc[~question_rows["문항유형"].isin(TYPE_MAP), "문항유형"]) - {""})
     if invalid_types:
@@ -100,6 +105,20 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
         banner_groups.setdefault(group, []).append({"var": var, "label": label, "children": []})
 
     banner_by_question = {row["var"]: row["배너설정"] for _, row in question_rows.iterrows()}
+    section_by_question = {row["var"]: row["문항영역"] for _, row in question_rows.iterrows()}
+    for group_name, vars_ in mr_group_map.items():
+        section_by_question[group_name] = next((section_by_question.get(v) for v in vars_ if section_by_question.get(v)), "미분류")
+
+    graph_settings = {}
+    if not chart_df.empty and "문항번호" in chart_df.columns:
+        for _, row in chart_df.iterrows():
+            qid = str(row.get("문항번호", "") or "").strip()
+            if not qid:
+                continue
+            graph_settings[qid] = {
+                "color": str(row.get("막대색상", "") or "").strip(),
+                "linebreak": str(row.get("줄바꿈", "") or "").strip(),
+            }
     profile_vars = []
     for nodes in banner_groups.values():
         for node in nodes:
@@ -169,6 +188,8 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
         "selected_mr_groups": list(mr_group_map),
         "banner_groups": banner_groups,
         "banner_by_question": banner_by_question,
+        "section_by_question": section_by_question,
+        "graph_settings": graph_settings,
         "profile_vars": profile_vars,
         "errors": errors,
         "warnings": warnings,
@@ -180,7 +201,7 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
 def build_settings_from_questionnaire(template_path: str | Path, guide_df: pd.DataFrame) -> bytes:
     wb = load_workbook(template_path)
     ws = wb[QUESTION_SHEET]
-    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=5):
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=6):
         for cell in row:
             cell.value = None
 
@@ -192,6 +213,7 @@ def build_settings_from_questionnaire(template_path: str | Path, guide_df: pd.Da
         if _is_question_row(item):
             ws.cell(idx, 4, "단일응답")
             ws.cell(idx, 5, "전체값만 출력")
+            ws.cell(idx, 6, "미분류")
 
     output = BytesIO()
     wb.save(output)
