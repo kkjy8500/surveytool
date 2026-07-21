@@ -108,15 +108,50 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
 
     errors = []
     warnings = []
+    skipped_analysis_vars = []
+    skipped_banner_vars = []
     if data_df is not None:
         data_cols = set(map(str, data_df.columns))
         configured = set(question_order)
-        missing_data_vars = sorted(v for v in configured if v not in data_cols and type_map.get(v) != "분석제외")
-        missing_banner_vars = sorted(v for v in profile_vars if v not in data_cols)
-        if missing_data_vars:
-            errors.append("데이터에 없는 분석 문항: " + ", ".join(missing_data_vars[:30]))
-        if missing_banner_vars:
-            errors.append("데이터에 없는 배너변수: " + ", ".join(missing_banner_vars[:30]))
+
+        skipped_analysis_vars = sorted(
+            v for v in configured
+            if v not in data_cols and type_map.get(v) != "분석제외"
+        )
+        skipped_banner_vars = sorted(v for v in profile_vars if v not in data_cols)
+
+        if skipped_analysis_vars:
+            warnings.append(
+                "데이터에 없는 분석 문항은 건너뜁니다: "
+                + ", ".join(skipped_analysis_vars[:30])
+                + (f" 외 {len(skipped_analysis_vars) - 30}개" if len(skipped_analysis_vars) > 30 else "")
+            )
+        if skipped_banner_vars:
+            warnings.append(
+                "데이터에 없는 배너변수는 건너뜁니다: "
+                + ", ".join(skipped_banner_vars[:30])
+                + (f" 외 {len(skipped_banner_vars) - 30}개" if len(skipped_banner_vars) > 30 else "")
+            )
+
+        # 실제 데이터에 존재하는 변수만 이후 분석 대상으로 사용한다.
+        dep_vars = [v for v in dep_vars if v in data_cols]
+        scale_vars = [v for v in scale_vars if v in data_cols]
+
+        filtered_mr_group_map = {}
+        for group_name, vars_ in mr_group_map.items():
+            available_vars = [v for v in vars_ if v in data_cols]
+            if available_vars:
+                filtered_mr_group_map[group_name] = available_vars
+        mr_group_map = filtered_mr_group_map
+
+        filtered_banner_groups = {}
+        for group_name, nodes in banner_groups.items():
+            available_nodes = [node for node in nodes if node.get("var") in data_cols]
+            if available_nodes:
+                filtered_banner_groups[group_name] = available_nodes
+        banner_groups = filtered_banner_groups
+        profile_vars = [v for v in profile_vars if v in data_cols]
+
         unused_data = [c for c in data_df.columns if c not in configured]
         if unused_data:
             warnings.append(f"설정파일에 없는 데이터 컬럼 {len(unused_data)}개는 분석에서 제외됩니다.")
@@ -137,6 +172,8 @@ def load_survey_settings(uploaded_file, data_df: pd.DataFrame | None = None, sav
         "profile_vars": profile_vars,
         "errors": errors,
         "warnings": warnings,
+        "skipped_analysis_vars": skipped_analysis_vars,
+        "skipped_banner_vars": skipped_banner_vars,
     }
 
 
